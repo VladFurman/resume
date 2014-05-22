@@ -1,0 +1,317 @@
+//
+// CruzID Widget - getEmplidByCruzID
+//
+// UCSC PTR CC 9.2007 - Slugzilla 11750
+//
+// HISTORY
+//   1.0  Oct 2012 SJS scotts
+//   2.0  Mar 2013 SJS scotts
+//        
+//        Latest tools update introduced the technique of replacing the content of a page
+//        using AJAX and javascript without doing a page load. Version 1.0 of the 
+//        CruzID Widget had a dependency on the page load event to hook the content loader.
+//        The hook was used to replace the CruzID with an Emplid on a search page before the 
+//        search request was submitted to the server.
+//  
+//        This version of the CruzID Widget obsolete the code that hooks the page load event.
+//        Instead the function call getEmplidByCruzID() has been embedded directly into the
+//        net2.ContentLoader function that lives in HTML.PT_AJAX_NET.
+//
+// DESCRIPTION
+//
+//   This is the function library for the CruzID Widget. The widget enhances search pages
+//   to allow the operator to enter a cruzid in place of an emplid on search pages. The
+//   library includes other functions tomaintain a separate javascript namespace and 
+//   for generating various forms of urls that can be used to load various content.
+//
+//   This library is loaded via the javascript stored in HTML.SCX_APT_BOOTSTRAP_JS which is appended
+//   to the HTML.PT_AJAX_NET javascript which is in turn loaded by peopletools into every
+//   web page.
+//
+//   The HTML.PT_AJAX_NET javascript contains the function net2.ContentLoader. The ContentLoader
+//   is invoked to POST the search page form to the server. By embedding a call to the CruzID Widget 
+//   function (in this library) apt.utils.getEmplidByCruzID in the net2.ContentLoader function we 
+//   can lookup the emplid by cruzid and insert it into the EMPLID input field in the form 
+//   before the form is POSTed to the server.
+//
+// FUNCTIONS
+//
+//   apt (public)
+//     apt.namespace.create("apt.namepspace")
+//
+//   apt.files (public)
+//       apt.files.generateScriptContentUrl({object})
+//       apt.files.generateComponentContentUrl({object})
+//       apt.files.generateQueryContentUrl({object})
+//       apt.files.importScript({object})
+//       apt.files.importStylesheet("stylesheet")
+//
+//   apt.utils (public)
+//       apt.utils.getEmplidByCruzID();
+//
+//
+
+
+// Create our safe 'apt' namespace to prevent collisions with peopletools javascript
+
+if (!window.apt) {
+  apt = {
+    namespace: {
+      create: function (ns) {
+        var arr = ns.split(".");
+        var level = window;
+        var item;
+
+        while (item = arr.shift()) {
+          if(!level[item]) {
+            level[item] = {};
+          }
+          // Move to the next level in the namespace
+          level = level[item];
+        }
+      } // apt.namespace.create
+    } // apt.namespace
+  } // apt
+
+// Define public and private functions in the apt.files namespace
+
+  apt.files = (function() {
+   
+    /* private methods */
+
+    var buffer = window.location.pathname.match(/ps[pc]\/(.+?)(?:_\d)*?\/(.+?)\/(.+?)\//);
+    var baseUrl = "/psc/" + buffer[1] + "/" + buffer[2] + "/" + buffer[3];
+    var baseUrlNew = "/psc/" + buffer[1] + "_newwin" + "/" + buffer[2] + "/" + buffer[3];
+        
+    function isArray(obj) {
+      return (Object.prototype.toString.call(obj) === "[object Array]");
+    }
+    
+    function getBaseUrl(options) {
+      return (options.isNewWindow) ? baseUrlNew : baseUrl
+    }
+  
+    function dataToString(arr, data) {
+      if(!isArray(arr)) {
+        data = arr;
+        arr = [];
+      }
+      if(data) {
+        for (var key in data) {
+          arr.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
+        }
+      }
+      return arr;
+    }
+    
+    function toQueryString(arr) {
+      if(arr.length > 0) {
+        return "?" + arr.join("&");
+      } else {
+        return "";
+      }
+    }
+    
+    /* public methods are inside this closure */
+    
+    return {
+    
+      /* function: generateStaticUrl
+       * parameter: object containing the following properties:
+       *   path
+       * example:
+       *   apt.files.generateStaticUrl({
+       *       path: "/ucsc/js/jquery.js"
+       *       });
+       */
+      generateStaticUrl: function(options) {
+        return getBaseUrl(options) + options.path;
+      },
+
+
+      /* function: generateIScriptContentUrl
+       * parameter: object containing the following properties:
+       *   record, field, event, IScript_function
+       * example:
+       *   apt.files.generateScriptContentUrl({
+       *       record: "WEBLIB_APT_JSL",
+       *       field:  "ISCRIPT1",
+       *       event:  "FieldFormula",
+       *       script: "IScript_jQuery"});
+       */
+      generateScriptContentUrl: function(options, data) {
+        return getBaseUrl(options) + "/s/" +
+            options.record + "." + options.field + "." +
+            options.event + "." + options.script +
+            toQueryString(dataToString(data));
+      },
+
+
+      /* function: generateComponentContentUrl
+       * parameter: object containing the following properties:
+       *   menu, component, market, page (optional),
+       *   action (optional)
+       * example:
+       *   apt.files.generateComponentContentUrl({
+       *       menu:      "APT_CUSTOM",
+       *       component: "APT_TOOL_DEFN",
+       *       market:    "GBL"});
+       */
+      generateComponentContentUrl: function(options, data) {
+        var url = getBaseUrl(options) + "/c/" +
+            options.menu + "." + options.component + "." +
+            options.market;
+        var qsArray = [];
+        
+        if(options.page) {
+          qsArray.push("Page=" + options.page);
+        }
+        if(options.action) {
+          qsArray.push("Action=" + options.action);
+        }
+        
+        return url + toQueryString(dataToString(qsArray, data));
+      },
+
+
+      /* function: generateQueryContentUrl
+       * parameter: object containing the following properties:
+       *   query, isPublic
+       * example:
+       *   apt.files.generateQueryContentUrl({
+       *         isPublic: true,
+       *         isNewWindow: true,
+       *         query: "PT_SEC_PLIST_PAGES"
+       *       },
+       *       ["APT_CUSTOM"]);
+       */
+      generateQueryContentUrl: function(options, binds) {
+        var visibility = (options.isPublic) ? "PUBLIC" : "PRIVATE";
+        var url = getBaseUrl(options) +
+            "/q/?ICAction=ICQryNameURL=" +
+            visibility + "." + options.query
+        
+        if(binds) {
+          for (var idx = 0; idx < binds.length; idx++) {
+            url += "&BIND" + (idx+1) + "=" + binds[idx];
+          }
+        }
+        
+        return url;
+      },
+      
+
+      /* function: importScript
+       * parameters: object with the following properties:
+       *   id, url
+       * example:
+       *   apt.files.importScript({id: "jq",
+       *       url: "/url/to/javascript/file"});
+       */
+      importScript: function(parms) {
+        document.write("<scr" + "ipt id='" + parms.id + "' " +
+            "type='text/javascript' src='" + parms.url +
+            "'><\/script>");
+      },
+      
+
+      /* function: importStylesheet
+       * parameters:
+       *   url
+       * example:
+       *   apt.files.importStylesheet("/url/to/css/file"});
+       */
+      importStylesheet: function (url) {
+        var ss = document.createElement("link");
+        ss.rel = "stylesheet";
+        ss.type = "text/css";
+        ss.href = url;
+        document.getElementsByTagName("head")[0].appendChild(ss);
+      }
+
+    };  // return public methods
+
+  })(); // apt.files
+
+// Define public and private functions in the apt.utils namespace
+
+  apt.utils = (function() {
+
+      /* private functions */
+
+      function getEmplid(cruzid) {
+
+        // console.log("getEmplid: " + cruzid);
+
+        var emplid = window.jQuery.ajax({
+           		type: "GET",
+           		url:apt.files.generateScriptContentUrl({
+               	  record:  "WEBLIB_APT_JSL",
+               	   field:  "ISCRIPT1",
+               	   event:  "FieldFormula",
+               	  script: "IScript_Get_Emplid_By_CruzID"
+           		}),
+           		data:  {id: cruzid},
+           		cache: false,
+           		async: false,
+           		error: function (XMLHttpRequest, textStatus, errorThrown) {
+                   		 var message = textStatus || errorThrown;
+                         console.log("Error getting EMPLID: " + message);
+                }
+        }).responseText;
+
+        if ( emplid ) { return emplid; } else { return cruzid; }; 
+
+      } // getEmplid
+
+      function isSearchPage(formReference) {
+        if (formReference) {
+          var oElement = formReference.elements["#ICSearch"];
+          if (oElement != null) return true;
+        }
+      } // isSearchPage
+
+      /* public functions returned in the closure */
+
+      return {
+
+        getEmplidByCruzID: function(formReference) {
+
+          // console.log("getEmplidBycruzID was called");   
+          
+          if ( isSearchPage(formReference) ) {
+
+            // console.log("getEmplidByCruzID action is #ICSearch");
+
+		    var emplidInputField = window.jQuery('input[name$"=_EMPLID"][id$="_EMPLID"],input[name$="_COMMON_ID"][id$="_COMMON_ID"]');
+
+            if ( emplidInputField.length === 1 ) {  
+
+              // console.log("getEmplidByCruzID emplidInputField: " + emplidInputField.val());
+
+              if ( window.jQuery.isNaN(emplidInputField.val()) ) { // a cruzid is alphanumeric 
+
+                var cruzid =  emplidInputField.val();
+                var emplid =  getEmplid(cruzid);
+
+                if ( emplid ) { emplidInputField.val(emplid) };
+
+                // console.log("getEmplidByCruzID emplid: " + emplid);
+
+              } // if NotaNumber
+
+            } // if emplidInputField
+
+          } // if isSearchPage
+      
+        } // getEmplidByCruzID
+
+      }; // return public methods
+
+  })(); // apt.utils
+
+} // if window.apt
+
+
+//
+// UCSC PTR CC 9.2007 - End
